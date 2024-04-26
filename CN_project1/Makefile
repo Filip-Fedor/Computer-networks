@@ -16,4 +16,4 @@ src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f src/*.o tests/*.o ppcbc ppcbs
+	rm -f src/*.o ppcbc ppcbs

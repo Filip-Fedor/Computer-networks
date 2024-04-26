@@ -39,6 +39,9 @@ int main(int argc, char *argv[]) {
         handle_udpr_client(udp_conn, protocol_id);
         close(udp_conn.socket_fd);
     }
+    else {
+        error("wrong protocol");
+    }
 
     return 0;
 }

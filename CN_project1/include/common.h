@@ -9,9 +9,9 @@
 #define udp "udp"
 #define udpr "udpr"
 
-#define BUFFER_SIZE 5
-#define INITIAL_BUFFER_SIZE 1024
-#define READ_SIZE 1024
+#define BUFFER_SIZE 64000
+#define INITIAL_BUFFER_SIZE 4096
+#define READ_SIZE 4096
 
 #define MIN_DATA_LEN 1
 #define MAX_DATA_LEN 64000
@@ -25,8 +25,6 @@
 #define OK_COMMUNICATION 0
 
 #define BITS_PER_PART 32
-
-// #define MAX_CONNECTIONS 1
 
 #define conn_packet_type 1
 #define conacc_packet_type 2

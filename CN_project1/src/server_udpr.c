@@ -21,8 +21,6 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
                             uint64_t expected_packet_number,
                             size_t *read_size, uint64_t data_len) {
 
-    printf("=== waiting for data packet number: %lu\n", expected_packet_number);
-
     char buffer[MAX_LEN];
     struct sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);
@@ -43,10 +41,6 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
         if (from_addr.sin_addr.s_addr != client_addr->sin_addr.s_addr ||
             from_addr.sin_port != client_addr->sin_port) {
 
-            printf("Rejected packet from unexpected source: expected %s:%d, got %s:%d\n",
-           inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port),
-           inet_ntoa(from_addr.sin_addr), ntohs(from_addr.sin_port));
-
             if (recv_len == sizeof(CONN_packet)) {
                 CONN_packet *conn_packet = (CONN_packet *) buffer;
 
@@ -61,10 +55,10 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
                 DATA_packet *data_packet = (DATA_packet *) buffer;
 
                 send_rjt_packet(socket_fd, &from_addr, &from_len, 
-                                data_packet->session_id, expected_packet_number);
+                            data_packet->session_id, expected_packet_number);
                 continue;
             }
-            error("recvfrom different address");
+            
             continue;
         }
    
@@ -75,7 +69,6 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
             CONN_packet *conn_packet = (CONN_packet *)buffer;
 
             if (conn_packet->packet_type == conn_packet_type) {
-                printf("=== received conn packet. So still wait for data packet number: %lu\n", expected_packet_number);
                 continue;
             }
         }
@@ -91,9 +84,6 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
 
         uint64_t this_data_packet_number = be64toh(data_packet->packet_number);
         uint32_t data_bytes_len_net = ntohl(data_packet->data_bytes_len);
-
-        printf("=== Received header: type %u, session ID %" PRIu64 ", packet number %lu, data bytes length %u\n",
-        data_packet->packet_type, data_packet->session_id, this_data_packet_number, data_bytes_len_net);
 
         if (recv_len != (ssize_t)(sizeof(DATA_header) + data_bytes_len_net)) {
             send_rjt_packet(socket_fd, client_addr, client_addr_len, 
@@ -132,8 +122,7 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
             return EXIT_COMMUNICATION;
         }
 
-        if (this_data_packet_number + 1 == expected_packet_number) {
-            printf("=== Received previous DATA packet number: %lu. Still wait for DATA packet.\n", this_data_packet_number);
+        if (this_data_packet_number < expected_packet_number) {
             continue;
         }
         
@@ -143,19 +132,16 @@ int recv_data_packet_retr(int socket_fd, struct sockaddr_in *client_addr,
             error("bad DATA packet number");
             return EXIT_COMMUNICATION;
         }
+        data_packet->data[data_bytes_len_net] = '\0';
 
-
-        printf("=== Received DATA packet %lu: %.*s\n", this_data_packet_number, data_bytes_len_net, data_packet->data);
+        printf("%s", data_packet->data);
+        fflush(stdout);
 
         *read_size += data_bytes_len_net;
-
         break;
-
     }                            
 
-    
     return OK_COMMUNICATION;
-
 }
 
 int send_conacc_packet_and_recv_data_packet(int socket_fd, 
@@ -164,20 +150,15 @@ int send_conacc_packet_and_recv_data_packet(int socket_fd,
                         uint64_t session_id, 
                         size_t *first_data_packet_len_read, 
                         uint64_t data_len) {
-    
+
     CONACC_packet conacc_packet;
     conacc_packet.packet_type = conacc_packet_type;
     conacc_packet.session_id = session_id;
 
-
-    printf("Starting to write CONACC packet\n");
-
     int attempts = 0;
     bool data_received = false;
     
-    while (attempts < MAX_RETRANSMITS && !data_received) {
-
-        printf("Sending CONACC packet: type %u, session ID %lu.\n", conacc_packet.packet_type, conacc_packet.session_id);
+    while (attempts <= MAX_RETRANSMITS && !data_received) {
 
         if (sendto(socket_fd, &conacc_packet, sizeof(conacc_packet), 0,
                 (struct sockaddr *)client_addr, *client_addr_len) < 0) {
@@ -191,10 +172,8 @@ int send_conacc_packet_and_recv_data_packet(int socket_fd,
                                 first_data_packet_len_read, data_len);
         if (result_recv_data == OK_COMMUNICATION) {
             data_received = true;
-            printf("FIRST DATA RECEIVED\n");
         }
         else if (result_recv_data == TIMEOUT_COMMUNICATION) {
-            printf("Timeout or error occurred, retrasmissing, do not received DATA first packet.\n");
             attempts++;
         }
         else {
@@ -207,9 +186,6 @@ int send_conacc_packet_and_recv_data_packet(int socket_fd,
         return EXIT_COMMUNICATION;
     }
 
-    printf("Ended writing CONACC packet\n");
-
-
     return OK_COMMUNICATION;
 }
 
@@ -219,11 +195,8 @@ int send_acc_packet_and_recv_data_packet(int socket_fd, Session *session_active,
     uint64_t packet_number = first_packet_number;
     uint64_t read_size = 0;
 
-    printf("Starting sending ACC packets...\n");
-
     bool end = false;
     
-
     while (!end) {
         ACC_packet acc_packet;
         acc_packet.packet_type = acc_packet_type;
@@ -233,8 +206,7 @@ int send_acc_packet_and_recv_data_packet(int socket_fd, Session *session_active,
         int attempts = 0;
         bool data_received = false;
 
-        while (attempts < MAX_RETRANSMITS && !data_received) {
-            printf("Sending ACC packet: type %u, session ID %lu, packet number: %lu.\n", acc_packet.packet_type, acc_packet.session_id, packet_number);
+        while (attempts <= MAX_RETRANSMITS && !data_received) {
 
             if (sendto(socket_fd, &acc_packet, sizeof(acc_packet), 0,
                         (struct sockaddr *)&session_active->client_addr, 
@@ -243,10 +215,7 @@ int send_acc_packet_and_recv_data_packet(int socket_fd, Session *session_active,
                     error("sendto ACC packet");
                     return EXIT_COMMUNICATION;
             }
-
             packet_number++;
-
-            printf("siemamamama::::%lu\n", data_len);
 
             if (read_size == data_len) {
                 data_received = true;
@@ -262,10 +231,8 @@ int send_acc_packet_and_recv_data_packet(int socket_fd, Session *session_active,
                                     
                 if (result_recv_data == OK_COMMUNICATION) {
                     data_received = true;
-                    printf("DATA PACKET RECEIVED %lu.\n", packet_number);
                 }
                 else if (result_recv_data == TIMEOUT_COMMUNICATION) {
-                    printf("Timeout or error occurred, retrasmissing, do not received DATA packet number %lu.\n", packet_number);
                     packet_number--;
                     attempts++;
                 }
@@ -279,6 +246,6 @@ int send_acc_packet_and_recv_data_packet(int socket_fd, Session *session_active,
             return EXIT_COMMUNICATION;
         }
     }
-    printf("Sended last ACC packet\n");
+
     return OK_COMMUNICATION;
 }

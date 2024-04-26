@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include "server_udp_udpr.h"
 #include "server_udp.h"
@@ -41,26 +42,22 @@ void handle_udp_connection(int socket_fd, uint8_t protocol_id) {
 
     while (1) {
         remove_socket_timeout(socket_fd);
-        printf("NEW CONN\n");
         CONN_packet conn_packet;
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
         
         if (recv_conn_packet(socket_fd, &client_addr, &client_addr_len,
                             &conn_packet) == EXIT_COMMUNICATION) {
+
             continue;
         }
-
-        printf("\n");
 
         set_socket_timeout(socket_fd, MAX_WAIT);
 
         protocol_id = conn_packet.protocol_id;
-
         session_active.client_addr = client_addr;
         session_active.addr_len = client_addr_len;
         session_active.session_id = conn_packet.session_id;
-
         uint64_t data_len = be64toh(conn_packet.data_len);
 
         if (protocol_id == udp_protocol_id) {
@@ -71,24 +68,19 @@ void handle_udp_connection(int socket_fd, uint8_t protocol_id) {
                 continue;
             }
 
-            printf("\n");
-
             if (recv_data_packets(socket_fd, &session_active, data_len) == 
                 EXIT_COMMUNICATION) {
 
                 continue;
             }
 
-            printf("\n");
-
             send_rcvd_packet(socket_fd, &client_addr, &client_addr_len, 
                             session_active.session_id);
 
-            printf("END OK\n ===================================== \n");
         }
         else {
-
             size_t first_data_packet_len_read = 0;
+
             if (send_conacc_packet_and_recv_data_packet(socket_fd, &client_addr,
                                     &client_addr_len, session_active.session_id, 
                                     &first_data_packet_len_read, data_len) == 
@@ -96,9 +88,6 @@ void handle_udp_connection(int socket_fd, uint8_t protocol_id) {
 
                 continue;
             }
-            
-
-            printf("\n");
 
             data_len -= first_data_packet_len_read;
 
@@ -109,12 +98,8 @@ void handle_udp_connection(int socket_fd, uint8_t protocol_id) {
                 continue;
             }
 
-            printf("\n");
-
             send_rcvd_packet(socket_fd, &client_addr, &client_addr_len, 
                             session_active.session_id);
         }
-
-         printf("END OK\n ===================================== \n");
     }
 }
